@@ -3,23 +3,51 @@ import ast
 import networkx as nx
 from collections import defaultdict
 import yaml
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import sys
 import importlib.util
 import logging
+from typing import List, Optional
 from .exceptions import CodeAnalysisError
 
 # Set up logger
 logger = logging.getLogger(__name__)
 
 @dataclass
+class SmellParticipant:
+    """
+    Represents an architectural element (file, module, class, function)
+    that participates in an architectural smell, beyond the primary one.
+    """
+    file_path: str                     # Path to the file of this participant
+    element_name: str                  # Name of the module, class, or function
+    element_type: str                  # Type of the element (e.g., "class", "module", "function")
+    role_in_smell: str                 # Description of this participant's role in the smell
+    start_line: Optional[int] = None   # Optional start line number in this participant's file
+    end_line: Optional[int] = None     # Optional end line number in this participant's file
+
+@dataclass
 class ArchitecturalSmell:
+    """
+    Represents an architectural smell detected in the codebase.
+
+    Attributes:
+        name (str): The name of the architectural smell
+        description (str): Description of the architectural smell
+        file_path (str): Path to the primary file containing the architectural smell
+        module_class (str): The primary module or class containing the architectural smell
+        line_number (int, optional): The line number where the architectural smell was detected
+        severity (str): The severity level of the architectural smell ('low', 'medium', 'high')
+        related_participants (List[SmellParticipant]): List of other architectural elements involved
+            in this smell beyond the primary one (e.g., all modules in a cycle, clients of a hub)
+    """
     name: str
     description: str
     file_path: str
     module_class: str
     line_number: int = None
     severity: str = 'medium'
+    related_participants: List[SmellParticipant] = field(default_factory=list)
 
 class ArchitecturalSmellDetector:
     """
@@ -51,7 +79,7 @@ class ArchitecturalSmellDetector:
         self.module_functions = defaultdict(set)
         self.api_usage = defaultdict(list)
         self.thresholds = thresholds
-        self.file_paths = {}  # New attribute to store file paths
+        self.file_paths = {}
         self.external_dependencies = defaultdict(set)
         self.function_calls = defaultdict(set)  # Track inter-module function calls
 
@@ -236,7 +264,8 @@ class ArchitecturalSmellDetector:
                        not self.module_dependencies.out_edges(dependency):
                         self.module_dependencies.remove_node(dependency)
 
-    def add_smell(self, name, description, file_path, module_class, line_number=None, severity='medium'):
+    def add_smell(self, name, description, file_path, module_class, line_number=None,
+                  severity='medium', related_participants=None):
         """
         Add a detected architectural smell to the list.
         
@@ -247,14 +276,19 @@ class ArchitecturalSmellDetector:
             module_class (str): The module or class containing the smell
             line_number (int, optional): The line number where the smell was detected
             severity (str, optional): The severity level of the smell (default: 'medium')
+            related_participants (List[SmellParticipant], optional): List of related elements involved in the smell
         """
+        if related_participants is None:
+            related_participants = []
+
         self.architectural_smells.append(ArchitecturalSmell(
             name=name,
             description=description,
             file_path=file_path,
             module_class=module_class,
             line_number=line_number,
-            severity=severity
+            severity=severity,
+            related_participants=related_participants
         ))
 
     def detect_hub_like_dependency(self):
@@ -293,13 +327,45 @@ class ArchitecturalSmellDetector:
                 is_balanced = 0.2 <= fan_in_ratio / (fan_out_ratio + 0.0001) <= 5
                 
                 if not is_balanced:
+                    related_participants = []
+
+                    # Collect incoming dependencies (modules that depend on this hub)
+                    for predecessor in self.module_dependencies.predecessors(node):
+                        predecessor_file = self.file_paths.get(predecessor, "Unknown")
+                        related_participants.append(SmellParticipant(
+                            file_path=predecessor_file,
+                            element_name=predecessor,
+                            element_type="module",
+                            role_in_smell="Dependent on Hub",
+                        ))
+
+                    # Collect outgoing dependencies (modules that the hub depends on)
+                    for successor in self.module_dependencies.successors(node):
+                        successor_file = self.file_paths.get(successor, "Unknown")
+                        related_participants.append(SmellParticipant(
+                            file_path=successor_file,
+                            element_name=successor,
+                            element_type="module",
+                            role_in_smell="Hub Dependency",
+                        ))
+
+                    # Add external dependencies if any
+                    for dep_type, dep_name in self.external_dependencies[node]:
+                        related_participants.append(SmellParticipant(
+                            file_path="External Library",
+                            element_name=dep_name,
+                            element_type=dep_type,
+                            role_in_smell="External Dependency of Hub",
+                        ))
+
                     self.add_smell(
                         "Hub-like Dependency",
                         f"Module '{node}' is a potential hub with {total_connections} connections "
                         f"(in: {in_degree}, out: {out_degree}, external: {external_deps})",
                         self.file_paths.get(node, "Unknown"),
                         node,
-                        severity='high' if total_connections > min_connections * 2 else 'medium'
+                        severity='high' if total_connections > min_connections * 2 else 'medium',
+                        related_participants=related_participants
                     )
 
     def detect_scattered_functionality(self):
@@ -321,11 +387,23 @@ class ArchitecturalSmellDetector:
         min_occurrences = self.thresholds.get('MIN_SCATTERED_OCCURRENCES', 3)
         for func, modules in function_modules.items():
             if len(modules) >= min_occurrences:  # Increase minimum occurrences threshold
+                # Create related participants for all modules involved
+                related_participants = []
+                for module in modules:
+                    # Include all modules, including the "primary" one, for completeness
+                    related_participants.append(SmellParticipant(
+                        file_path=self.file_paths.get(module, "Unknown"),
+                        element_name=module,
+                        element_type="module",
+                        role_in_smell=f"Contains implementation of '{func}' function"
+                    ))
+
                 self.add_smell(
                     "Scattered Functionality",
                     f"Function '{func}' appears in {len(modules)} modules: {', '.join(modules)}",
                     self.file_paths.get(modules[0], "Unknown"),
-                    modules[0]
+                    modules[0],
+                    related_participants=related_participants
                 )
 
     def detect_redundant_abstractions(self):
@@ -354,16 +432,42 @@ class ArchitecturalSmellDetector:
                 # Calculate similarity score between modules
                 for i in range(len(modules)):
                     for j in range(i + 1, len(modules)):
-                        module1_funcs = self.module_functions[modules[i]]
-                        module2_funcs = self.module_functions[modules[j]]
-                        similarity = len(module1_funcs & module2_funcs) / len(module1_funcs | module2_funcs)
+                        module1 = modules[i]
+                        module2 = modules[j]
+                        module1_funcs = self.module_functions[module1]
+                        module2_funcs = self.module_functions[module2]
+                        common_funcs = module1_funcs & module2_funcs
+                        all_funcs = module1_funcs | module2_funcs
+                        similarity = len(common_funcs) / len(all_funcs)
                         
                         if similarity >= similarity_threshold:
+                            # Create related participants
+                            related_participants = []
+
+                            # First add the redundant module
+                            related_participants.append(SmellParticipant(
+                                file_path=self.file_paths.get(module2, "Unknown"),
+                                element_name=module2,
+                                element_type="module",
+                                role_in_smell=f"Redundant with {module1} (similarity: {similarity:.1%})"
+                            ))
+
+                            # Add details about the common functions
+                            common_funcs_sorted = sorted(common_funcs)
+                            for func in common_funcs_sorted:
+                                related_participants.append(SmellParticipant(
+                                    file_path=self.file_paths.get(module1, "Unknown"),
+                                    element_name=f"{module1}.{func}",
+                                    element_type="function",
+                                    role_in_smell=f"Duplicated in both modules"
+                                ))
+
                             self.add_smell(
                                 "Potential Redundant Abstractions",
-                                f"Modules {modules[i]} and {modules[j]} have {similarity:.1%} similar functionalities",
-                                self.file_paths.get(modules[i], "Unknown"),
-                                modules[i]
+                                f"Modules {module1} and {module2} have {similarity:.1%} similar functionalities",
+                                self.file_paths.get(module1, "Unknown"),
+                                module1,
+                                related_participants=related_participants
                             )
 
     def detect_god_objects(self):
@@ -381,11 +485,38 @@ class ArchitecturalSmellDetector:
             
             if (len(public_functions) >= min_functions and 
                 len(public_functions) > self.thresholds['GOD_OBJECT_FUNCTIONS']):
+                related_participants = []
+
+                # For God Objects, find related modules it interacts with
+                # Track dependencies (modules it imports/uses)
+                for successor in self.module_dependencies.successors(module):
+                    successor_file = self.file_paths.get(successor, "Unknown")
+                    related_participants.append(SmellParticipant(
+                        file_path=successor_file,
+                        element_name=successor,
+                        element_type="module",
+                        role_in_smell="Used by God Object"
+                    ))
+
+                # Also include function calls to other modules
+                for module_called, func_called in self.function_calls.get(module, []):
+                    # Try to find the target module
+                    for possible_module in self.module_functions:
+                        if possible_module.endswith(module_called) and func_called in self.module_functions[possible_module]:
+                            module_file = self.file_paths.get(possible_module, "Unknown")
+                            related_participants.append(SmellParticipant(
+                                file_path=module_file,
+                                element_name=f"{possible_module}.{func_called}",
+                                element_type="function",
+                                role_in_smell="Function called by God Object"
+                            ))
+
                 self.add_smell(
                     "God Object",
                     f"Module '{module}' has too many public functions ({len(public_functions)})", 
                     self.file_paths.get(module, "Unknown"),
-                    module
+                    module,
+                    related_participants=related_participants
                 )
 
     def detect_improper_api_usage(self):
@@ -408,12 +539,47 @@ class ArchitecturalSmellDetector:
                 
                 if (repetitive_calls and 
                     sum(repetitive_calls.values()) / len(api_calls) > repetition_threshold):
+                    # Create related participants for API usage patterns
+                    related_participants = []
+
+                    # Add repetitive API calls as participants
+                    for call, count in sorted(repetitive_calls.items(), key=lambda x: x[1], reverse=True):
+                        related_participants.append(SmellParticipant(
+                            file_path=self.file_paths.get(module, "Unknown"),
+                            element_name=call,
+                            element_type="api_call",
+                            role_in_smell=f"Repetitive API call ({count} occurrences)"
+                        ))
+
+                    # Look for similar modules with better API usage patterns
+                    for other_module, other_calls in self.api_usage.items():
+                        if other_module != module and len(other_calls) >= min_calls:
+                            # Check if this module uses similar APIs but in a less repetitive way
+                            other_call_freq = {}
+                            for call in other_calls:
+                                other_call_freq[call] = other_call_freq.get(call, 0) + 1
+
+                            # Check if the other module uses some of the same APIs
+                            common_apis = set(repetitive_calls.keys()) & set(other_call_freq.keys())
+                            if common_apis:
+                                # Check if the other module uses these APIs less repetitively
+                                other_repetition = sum(other_call_freq[call] for call in common_apis) / len(other_calls)
+                                if other_repetition < (sum(repetitive_calls.values()) / len(api_calls)):
+                                    related_participants.append(SmellParticipant(
+                                        file_path=self.file_paths.get(other_module, "Unknown"),
+                                        element_name=other_module,
+                                        element_type="module",
+                                        role_in_smell="Reference module with better API usage pattern"
+                                    ))
+                                    break  # Just add one example of better usage
+
                     self.add_smell(
                         "Potential Improper API Usage",
                         f"Module '{module}' has repetitive API calls: " +
                         ", ".join(f"{call}({count}x)" for call, count in repetitive_calls.items()),
                         self.file_paths.get(module, "Unknown"),
-                        module
+                        module,
+                        related_participants=related_participants
                     )
 
     def detect_orphan_modules(self):
@@ -432,12 +598,50 @@ class ArchitecturalSmellDetector:
             if (self.module_dependencies.in_degree(node) + self.module_dependencies.out_degree(node) == 0 and
                 module_name not in excluded_modules and
                 not any(excluded in node.lower() for excluded in excluded_modules)):
+
+                # For orphan modules, find potential integration candidates based on functionality
+                related_participants = []
+                orphan_functions = self.module_functions.get(node, set())
+
+                # Look for modules with similar functionality that could be integrated with this orphan
+                for other_node in self.module_dependencies.nodes():
+                    if other_node != node and not any(excluded in other_node.lower() for excluded in excluded_modules):
+                        other_functions = self.module_functions.get(other_node, set())
+
+                        # Check for function name overlap as a sign of potential integration opportunity
+                        common_functions = orphan_functions.intersection(other_functions)
+                        if common_functions:
+                            related_participants.append(SmellParticipant(
+                                file_path=self.file_paths.get(other_node, "Unknown"),
+                                element_name=other_node,
+                                element_type="module",
+                                role_in_smell=f"Potential integration candidate (shares {len(common_functions)} similar functions)"
+                            ))
+
+                # If no function overlap is found, suggest modules in similar directories
+                if not related_participants and self.file_paths.get(node, ""):
+                    orphan_dir = os.path.dirname(self.file_paths.get(node, ""))
+
+                    for other_node in self.module_dependencies.nodes():
+                        if other_node != node and self.file_paths.get(other_node, ""):
+                            other_dir = os.path.dirname(self.file_paths.get(other_node, ""))
+
+                            # If modules are in the same directory, they might be related
+                            if other_dir == orphan_dir:
+                                related_participants.append(SmellParticipant(
+                                    file_path=self.file_paths.get(other_node, "Unknown"),
+                                    element_name=other_node,
+                                    element_type="module",
+                                    role_in_smell="Potential integration candidate (same directory)"
+                                ))
+
                 self.add_smell(
                     name="Orphan Module",
                     description=f"'{node}' is isolated from other modules",
                     file_path=self.file_paths.get(node, "Unknown"),
                     module_class=node,
-                    severity='medium'
+                    severity='medium',
+                    related_participants=related_participants
                 )
 
     def detect_cyclic_dependencies(self):
@@ -483,13 +687,27 @@ class ArchitecturalSmellDetector:
             severity = 'high' if len(cycle) >= 3 and strength >= 3 else 'medium'
             
             cycle_str = ' -> '.join(cycle + [cycle[0]])
+
+            # Create related participants for all modules in the cycle
+            related_participants = []
+            for node in cycle:
+                # Add all nodes in the cycle as participants, including the "primary" one
+                # for a more complete representation of the cycle
+                node_file = self.file_paths.get(node, "Unknown")
+                related_participants.append(SmellParticipant(
+                    file_path=node_file,
+                    element_name=node,
+                    element_type="module",
+                    role_in_smell=f"Member of cycle"
+                ))
+
             self.add_smell(
                 "Cyclic Dependency",
-                f"Strong cyclic dependency detected: {cycle_str}\n"
-                f"Cycle strength: {strength} mutual dependencies",
+                f"Strong cyclic dependency detected: {cycle_str}; Cycle strength: {strength} mutual dependencies",
                 self.file_paths.get(cycle[0], "Unknown"),
                 cycle[0],
-                severity=severity
+                severity=severity,
+                related_participants=related_participants
             )
 
     def detect_unstable_dependencies(self):
@@ -510,12 +728,47 @@ class ArchitecturalSmellDetector:
             if total_dependencies >= min_dependencies:
                 instability = out_degree / total_dependencies
                 if instability > self.thresholds['UNSTABLE_DEPENDENCY_THRESHOLD']:
+                    related_participants = []
+
+                    # Track outgoing dependencies (what this module depends on)
+                    for successor in self.module_dependencies.successors(node):
+                        successor_file = self.file_paths.get(successor, "Unknown")
+                        successor_in_degree = self.module_dependencies.in_degree(successor)
+                        successor_out_degree = self.module_dependencies.out_degree(successor)
+                        successor_total = successor_in_degree + successor_out_degree
+                        successor_instability = successor_out_degree / successor_total if successor_total > 0 else 0
+
+                        # Calculate stability comparison
+                        stability_comparison = ""
+                        if successor_total >= min_dependencies:
+                            if successor_instability > instability:
+                                stability_comparison = " (more unstable)"
+                            elif successor_instability < instability:
+                                stability_comparison = " (more stable)"
+
+                        related_participants.append(SmellParticipant(
+                            file_path=successor_file,
+                            element_name=successor,
+                            element_type="module",
+                            role_in_smell=f"Dependency with instability {successor_instability:.2f}{stability_comparison}"
+                        ))
+
+                    # Also add external dependencies if any
+                    for dep_type, dep_name in self.external_dependencies[node]:
+                        related_participants.append(SmellParticipant(
+                            file_path="External Library",
+                            element_name=dep_name,
+                            element_type=dep_type,
+                            role_in_smell="External Dependency"
+                        ))
+
                     self.add_smell(
                         "Unstable Dependency",
                         f"Module '{node}' has high instability ({instability:.2f}) " +
                         f"with {out_degree} outgoing and {in_degree} incoming dependencies",
                         self.file_paths.get(node, "Unknown"),
-                        node
+                        node,
+                        related_participants=related_participants
                     )
 
     def print_report(self):
@@ -529,7 +782,25 @@ class ArchitecturalSmellDetector:
         else:
             print("Detected Architectural Smells:")
             for smell in self.architectural_smells:
-                print(f"- {smell}")
+                print(f"- {smell.name} in {smell.module_class}")
+                print(f"  File: {smell.file_path}")
+                print(f"  Description: {smell.description}")
+                print(f"  Severity: {smell.severity}")
+                if smell.line_number:
+                    print(f"  Line: {smell.line_number}")
+
+                if smell.related_participants:
+                    print("  Related participants:")
+                    for i, participant in enumerate(smell.related_participants, 1):
+                        print(f"    {i}. {participant.element_name} ({participant.element_type})")
+                        print(f"       Role: {participant.role_in_smell}")
+                        print(f"       File: {participant.file_path}")
+                        if participant.start_line:
+                            line_info = f"Line: {participant.start_line}"
+                            if participant.end_line:
+                                line_info += f" to {participant.end_line}"
+                            print(f"       {line_info}")
+                print()
 
 def analyze_architecture(directory_path, config_path):
     """

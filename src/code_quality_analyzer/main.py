@@ -7,6 +7,7 @@ from .architectural_smell_detector import ArchitecturalSmellDetector
 from .structural_smell_detector import StructuralSmellDetector
 from .config_handler import ConfigHandler
 from .exceptions import CodeAnalysisError
+import json
 
 # Set up logging
 logging.basicConfig(
@@ -326,6 +327,26 @@ def generate_report(code_smells, architectural_smells, structural_smells,
         report += "---------------------\n"
         for smell in architectural_smells:
             report += f"- {smell.name}: {smell.description}\n"
+            report += f"  File: {smell.file_path}\n"
+            if smell.module_class:
+                report += f"  Module/Class: {smell.module_class}\n"
+            if smell.line_number:
+                report += f"  Line: {smell.line_number}\n"
+            report += f"  Severity: {smell.severity}\n"
+            
+            # Add related participants information
+            if hasattr(smell, 'related_participants') and smell.related_participants:
+                report += "  Related participants:\n"
+                for i, participant in enumerate(smell.related_participants, 1):
+                    report += f"    {i}. {participant.element_name} ({participant.element_type})\n"
+                    report += f"       Role: {participant.role_in_smell}\n"
+                    report += f"       File: {participant.file_path}\n"
+                    if participant.start_line:
+                        line_info = f"Line: {participant.start_line}"
+                        if participant.end_line:
+                            line_info += f" to {participant.end_line}"
+                        report += f"       {line_info}\n"
+            report += "\n"
     else:
         report += "No architectural smells detected.\n\n"
 
@@ -359,8 +380,9 @@ def generate_csv_report(code_smells, architectural_smells, structural_smells, cs
         structural_smells (list): A list of detected StructuralSmell objects
         csv_file (str): The path to the output CSV file
     """
+    
     with open(csv_file, 'w', newline='') as csvfile:
-        fieldnames = ['Type', 'Name', 'Description', 'File', 'Module/Class', 'Line Number', 'Severity']
+        fieldnames = ['Type', 'Name', 'Description', 'File', 'Module/Class', 'Line Number', 'Severity', 'Related Participants']
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
 
@@ -373,7 +395,8 @@ def generate_csv_report(code_smells, architectural_smells, structural_smells, cs
                 'File': smell.file_path,
                 'Module/Class': smell.module_class,
                 'Line Number': smell.line_number,
-                'Severity': smell.severity
+                'Severity': smell.severity,
+                'Related Participants': '[]'  # Not supported for structura smells yet
             })
 
         # Write code smells
@@ -385,11 +408,28 @@ def generate_csv_report(code_smells, architectural_smells, structural_smells, cs
                 'File': smell.file_path,
                 'Module/Class': smell.module_class,
                 'Line Number': smell.line_number,
-                'Severity': smell.severity
+                'Severity': smell.severity,
+                'Related Participants': '[]'  # Not supported for code smells yet
             })
 
         # Write architectural smells
         for smell in architectural_smells:
+            # Format related participants as JSON for machine readability
+            participants_json = []
+            if hasattr(smell, 'related_participants') and smell.related_participants:
+                for participant in smell.related_participants:
+                    participant_data = {
+                        'element_name': participant.element_name,
+                        'element_type': participant.element_type,
+                        'role': participant.role_in_smell,
+                        'file_path': participant.file_path
+                    }
+                    if hasattr(participant, 'start_line') and participant.start_line:
+                        participant_data['start_line'] = participant.start_line
+                    if hasattr(participant, 'end_line') and participant.end_line:
+                        participant_data['end_line'] = participant.end_line
+                    participants_json.append(participant_data)
+
             writer.writerow({
                 'Type': 'Architectural',
                 'Name': smell.name,
@@ -397,7 +437,8 @@ def generate_csv_report(code_smells, architectural_smells, structural_smells, cs
                 'File': smell.file_path,
                 'Module/Class': smell.module_class,
                 'Line Number': smell.line_number,
-                'Severity': smell.severity
+                'Severity': smell.severity,
+                'Related Participants': json.dumps(participants_json, ensure_ascii=True)
             })
 
     logger.info(f"CSV report generated and saved to {csv_file}")
