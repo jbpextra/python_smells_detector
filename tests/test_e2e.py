@@ -49,8 +49,12 @@ def test_report_schema(report):
     assert report["summary"]["total"] == len(report["findings"])
     assert sum(report["summary"]["by_severity"].values()) == len(report["findings"])
     for finding in report["findings"]:
-        assert set(finding) == {"type", "name", "description", "file_path",
-                                "module_class", "line_number", "severity"}
+        expected = {"type", "name", "description", "file_path",
+                    "module_class", "line_number", "severity"}
+        if finding["type"] == "Architectural":
+            expected.add("related_participants")
+            assert isinstance(finding["related_participants"], list)
+        assert set(finding) == expected
         assert finding["severity"] in ("low", "medium", "high")
 
 

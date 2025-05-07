@@ -385,14 +385,32 @@ def analyze_project(argv=None):
     return EXIT_OK
 
 
-def _report_lines(smells):
+def _report_lines(smells, architectural=False):
     lines = []
     for smell in smells:
         lines.append(f"- {smell.name}: {smell.description}")
+        if architectural:
+            lines.append(f"  File: {smell.file_path}")
+            if smell.module_class:
+                lines.append(f"  Module/Class: {smell.module_class}")
         if smell.line_number:
             lines.append(f"  Line: {smell.line_number}")
-        lines.append(f"  File: {smell.file_path}")
-        lines.append(f"  Severity: {smell.severity}\n")
+        if not architectural:
+            lines.append(f"  File: {smell.file_path}")
+        lines.append(f"  Severity: {smell.severity}")
+        participants = getattr(smell, 'related_participants', ()) if architectural else ()
+        if participants:
+            lines.append("  Related participants:")
+            for i, participant in enumerate(participants, 1):
+                lines.append(f"    {i}. {participant.element_name} ({participant.element_type})")
+                lines.append(f"       Role: {participant.role_in_smell}")
+                lines.append(f"       File: {participant.file_path}")
+                if participant.start_line:
+                    location = f"Line: {participant.start_line}"
+                    if participant.end_line:
+                        location += f" to {participant.end_line}"
+                    lines.append(f"       {location}")
+        lines.append('')
     return "\n".join(lines) + "\n"
 
 
@@ -415,7 +433,8 @@ def generate_report(code_smells, architectural_smells, structural_smells,
                           ("Architectural", architectural_smells)):
         if smells:
             heading = f"{title} Smells:"
-            report += f"{heading}\n{'-' * len(heading)}\n" + _report_lines(smells) + "\n"
+            report += (f"{heading}\n{'-' * len(heading)}\n"
+                       + _report_lines(smells, architectural=title == 'Architectural') + "\n")
         else:
             report += f"No {title.lower()} smells detected.\n\n"
 
@@ -437,6 +456,24 @@ def generate_report(code_smells, architectural_smells, structural_smells,
         print(report)
 
 
+def _csv_participants(smell):
+    """Keep the participant CSV contract (including its historical ``role`` key)."""
+    participants = []
+    for participant in getattr(smell, 'related_participants', ()):
+        item = {
+            'element_name': participant.element_name,
+            'element_type': participant.element_type,
+            'role': participant.role_in_smell,
+            'file_path': participant.file_path,
+        }
+        if participant.start_line:
+            item['start_line'] = participant.start_line
+        if participant.end_line:
+            item['end_line'] = participant.end_line
+        participants.append(item)
+    return participants
+
+
 def generate_csv_report(code_smells, architectural_smells, structural_smells, csv_file):
     """
     Generate a CSV report of all detected smells.
@@ -455,7 +492,8 @@ def generate_csv_report(code_smells, architectural_smells, structural_smells, cs
             'File',
             'Module/Class',
             'Line Number',
-            'Severity']
+            'Severity',
+            'Related Participants']
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
 
@@ -469,7 +507,10 @@ def generate_csv_report(code_smells, architectural_smells, structural_smells, cs
                     'File': smell.file_path,
                     'Module/Class': smell.module_class,
                     'Line Number': smell.line_number,
-                    'Severity': smell.severity
+                    'Severity': smell.severity,
+                    'Related Participants': json.dumps(
+                        _csv_participants(smell) if label == 'Architectural' else [],
+                        ensure_ascii=True),
                 })
 
     logger.info(f"CSV report generated and saved to {csv_file}")
