@@ -217,4 +217,39 @@ def test_cyclic_dependency_detection(architectural_smell_detector, tmp_path):
         assert module_names == {"moduleA", "moduleB"}, "Both modules should be participants"
 
 
+def test_deeply_nested_module_naming(architectural_smell_detector, tmp_path):
+    """Test that deeply nested modules have correct full module paths."""
+    # Create a deeply nested package structure: pkg/subpkg/inner/deep_module.py
+    deep_dir = tmp_path / "pkg" / "subpkg" / "inner"
+    deep_dir.mkdir(parents=True)
+
+    # Create __init__.py files to make it a proper package
+    (tmp_path / "pkg" / "__init__.py").write_text("")
+    (tmp_path / "pkg" / "subpkg" / "__init__.py").write_text("")
+    (tmp_path / "pkg" / "subpkg" / "inner" / "__init__.py").write_text("")
+
+    # Create the deeply nested module with enough functions to be detected
+    deep_module = deep_dir / "deep_module.py"
+    deep_module.write_text("\n".join([f"def func{i}(): pass" for i in range(26)]))
+
+    architectural_smell_detector.detect_smells(str(tmp_path))
+
+    # Verify the module name is the full path, not truncated
+    expected_module = "pkg.subpkg.inner.deep_module"
+    assert expected_module in architectural_smell_detector.file_paths, \
+        f"Expected '{expected_module}' in file_paths, got: {list(architectural_smell_detector.file_paths.keys())}"
+
+    # Verify the file path is correctly resolved (not "Unknown")
+    assert architectural_smell_detector.file_paths[expected_module] != "Unknown"
+    assert architectural_smell_detector.file_paths[expected_module].endswith("deep_module.py")
+
+    # Verify any smells detected for this module use the full module path
+    for smell in architectural_smell_detector.architectural_smells:
+        if "deep_module" in smell.module_class:
+            assert smell.module_class == expected_module, \
+                f"Expected module_class '{expected_module}', got '{smell.module_class}'"
+            assert smell.file_path != "Unknown", \
+                f"file_path should not be 'Unknown' for module {smell.module_class}"
+
+
 
