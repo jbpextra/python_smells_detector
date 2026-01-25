@@ -54,6 +54,7 @@ class ArchitecturalSmellDetector:
         self.file_paths = {}  # New attribute to store file paths
         self.external_dependencies = defaultdict(set)
         self.function_calls = defaultdict(set)  # Track inter-module function calls
+        self.project_root = None  # Will be set during analyze_directory
 
     def load_thresholds(self, config_path):
         """
@@ -116,6 +117,7 @@ class ArchitecturalSmellDetector:
         Args:
             directory_path (str): The path to the directory to be analyzed.
         """
+        self.project_root = os.path.abspath(directory_path)
         for root, _, files in os.walk(directory_path):
             for file in files:
                 if file.endswith('.py'):
@@ -134,9 +136,11 @@ class ArchitecturalSmellDetector:
             with open(file_path, 'r') as file:
                 tree = ast.parse(file.read())
 
-            # Get relative module path
-            module_name = os.path.relpath(file_path, os.path.dirname(os.path.dirname(file_path)))
-            module_name = module_name.replace(os.path.sep, '.')[:-3]  # Remove .py extension
+            # Get relative module path from project root
+            rel_path = os.path.relpath(file_path, self.project_root)
+            # splitext removes .py extension, then convert path separators to dots
+            # e.g., "pkg/subpkg/module.py" -> "pkg.subpkg.module"
+            module_name = os.path.splitext(rel_path)[0].replace(os.path.sep, '.')
             self.module_dependencies.add_node(module_name)
             self.file_paths[module_name] = file_path
             
@@ -197,16 +201,15 @@ class ArchitecturalSmellDetector:
         Resolve external dependencies while preserving intra-project dependencies.
         """
         # Get all project modules
-        project_root = os.path.dirname(os.path.dirname(next(iter(self.file_paths.values()))))
         all_modules = set(self.module_dependencies.nodes())
         standard_lib_modules = set(sys.stdlib_module_names)
-        
+
         for module in list(self.module_dependencies.nodes()):
             for dependency in list(self.module_dependencies.successors(module)):
                 # Check if it's a project module by looking for the file
                 possible_paths = [
-                    os.path.join(project_root, *dependency.split('.')) + '.py',
-                    os.path.join(project_root, dependency.split('.')[0], '__init__.py')
+                    os.path.join(self.project_root, *dependency.split('.')) + '.py',
+                    os.path.join(self.project_root, dependency.split('.')[0], '__init__.py')
                 ]
                 
                 is_project_module = (
