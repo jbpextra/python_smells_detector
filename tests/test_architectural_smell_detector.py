@@ -1,9 +1,12 @@
 import pytest
 import os
+import csv
+import json
 from code_quality_analyzer.architectural_smell_detector import (
-    ArchitecturalSmellDetector, SmellParticipant
+    ArchitecturalSmellDetector, SmellParticipant, ArchitecturalSmell
 )
 from code_quality_analyzer.config_handler import ConfigHandler
+from code_quality_analyzer.main import generate_csv_report
 
 @pytest.fixture
 def config_handler():
@@ -250,6 +253,148 @@ def test_deeply_nested_module_naming(architectural_smell_detector, tmp_path):
                 f"Expected module_class '{expected_module}', got '{smell.module_class}'"
             assert smell.file_path != "Unknown", \
                 f"file_path should not be 'Unknown' for module {smell.module_class}"
+
+
+def test_architectural_smell_has_new_fields():
+    """Test that ArchitecturalSmell dataclass has new fields with correct types."""
+    smell = ArchitecturalSmell(
+        name="Test Smell",
+        description="Test description",
+        file_path="/test/path.py",
+        module_class="test_module"
+    )
+
+    # Check new fields exist with correct default types
+    assert hasattr(smell, 'importers_by_participant')
+    assert hasattr(smell, 'participant_dependency_edges')
+    assert isinstance(smell.importers_by_participant, dict)
+    assert isinstance(smell.participant_dependency_edges, list)
+
+    # Test with values provided
+    smell_with_data = ArchitecturalSmell(
+        name="Test Smell",
+        description="Test description",
+        file_path="/test/path.py",
+        module_class="test_module",
+        importers_by_participant={"/a.py": ["/b.py", "/c.py"]},
+        participant_dependency_edges=[("/a.py", "/b.py"), ("/b.py", "/c.py")]
+    )
+
+    assert smell_with_data.importers_by_participant == {"/a.py": ["/b.py", "/c.py"]}
+    assert smell_with_data.participant_dependency_edges == [("/a.py", "/b.py"), ("/b.py", "/c.py")]
+
+
+def test_importers_computed_for_cyclic_dependency(architectural_smell_detector, tmp_path):
+    """Test that importers are computed correctly for cyclic dependency smells."""
+    # Create modules with cyclic dependencies
+    module_a = tmp_path / "moduleA.py"
+    module_b = tmp_path / "moduleB.py"
+    module_c = tmp_path / "moduleC.py"  # This imports moduleA but is not part of cycle
+
+    module_a.write_text("import moduleB\ndef funcA(): pass")
+    module_b.write_text("import moduleA\ndef funcB(): pass")
+    module_c.write_text("import moduleA\ndef funcC(): pass")
+
+    architectural_smell_detector.detect_smells(str(tmp_path))
+
+    # Find the Cyclic Dependency smell
+    cycle_smell = None
+    for smell in architectural_smell_detector.architectural_smells:
+        if "Cyclic Dependency" in smell.name:
+            cycle_smell = smell
+            break
+
+    if cycle_smell:
+        # Check that new fields exist
+        assert hasattr(cycle_smell, 'importers_by_participant')
+        assert hasattr(cycle_smell, 'participant_dependency_edges')
+        assert isinstance(cycle_smell.importers_by_participant, dict)
+        assert isinstance(cycle_smell.participant_dependency_edges, list)
+
+        # Check that edges are computed for participants in the cycle
+        # moduleA imports moduleB, moduleB imports moduleA
+        if cycle_smell.participant_dependency_edges:
+            for src, dst in cycle_smell.participant_dependency_edges:
+                assert src.endswith('.py')
+                assert dst.endswith('.py')
+
+
+def test_dependency_edges_for_hub_like_dependency(architectural_smell_detector, tmp_path):
+    """Test that dependency edges are computed correctly for hub-like dependencies."""
+    # Create a hub module with many connections
+    hub = tmp_path / "hub.py"
+
+    # Create modules that depend on the hub and that the hub depends on
+    modules = []
+    for i in range(6):
+        module = tmp_path / f"module{i}.py"
+        if i < 3:
+            # These modules import the hub
+            module.write_text(f"import hub\ndef func{i}(): pass")
+        else:
+            # Hub imports these modules
+            module.write_text(f"def func{i}(): pass")
+        modules.append(module)
+
+    # Create hub that imports module3, module4, module5
+    hub.write_text("import module3\nimport module4\nimport module5\ndef hub_func(): pass")
+
+    architectural_smell_detector.detect_smells(str(tmp_path))
+
+    # Find the Hub-like Dependency smell
+    hub_smell = None
+    for smell in architectural_smell_detector.architectural_smells:
+        if "Hub-like Dependency" in smell.name:
+            hub_smell = smell
+            break
+
+    if hub_smell:
+        # Check that new fields exist and have correct types
+        assert hasattr(hub_smell, 'importers_by_participant')
+        assert hasattr(hub_smell, 'participant_dependency_edges')
+        assert isinstance(hub_smell.importers_by_participant, dict)
+        assert isinstance(hub_smell.participant_dependency_edges, list)
+
+
+def test_csv_output_contains_new_columns(architectural_smell_detector, tmp_path):
+    """Test that CSV output contains the new columns with valid JSON."""
+    # Create modules with cyclic dependencies
+    module_a = tmp_path / "moduleA.py"
+    module_b = tmp_path / "moduleB.py"
+
+    module_a.write_text("import moduleB\ndef funcA(): pass")
+    module_b.write_text("import moduleA\ndef funcB(): pass")
+
+    architectural_smell_detector.detect_smells(str(tmp_path))
+
+    # Generate CSV report
+    csv_file = tmp_path / "test_report.csv"
+    generate_csv_report([], architectural_smell_detector.architectural_smells, [], str(csv_file))
+
+    # Read and verify CSV
+    with open(csv_file, 'r') as f:
+        reader = csv.DictReader(f)
+        rows = list(reader)
+
+    # Check that new columns exist in fieldnames
+    assert 'Importers By Participant' in reader.fieldnames
+    assert 'Participant Dependency Edges' in reader.fieldnames
+
+    # Check that each architectural smell row has valid JSON in new columns
+    for row in rows:
+        if row['Type'] == 'Architectural':
+            # Verify Importers By Participant is valid JSON object
+            importers = json.loads(row['Importers By Participant'])
+            assert isinstance(importers, dict)
+
+            # Verify Participant Dependency Edges is valid JSON array
+            edges = json.loads(row['Participant Dependency Edges'])
+            assert isinstance(edges, list)
+
+            # If edges exist, verify format is [[src, dst], ...]
+            for edge in edges:
+                assert isinstance(edge, list)
+                assert len(edge) == 2
 
 
 

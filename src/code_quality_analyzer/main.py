@@ -382,7 +382,7 @@ def generate_csv_report(code_smells, architectural_smells, structural_smells, cs
     """
     
     with open(csv_file, 'w', newline='') as csvfile:
-        fieldnames = ['Type', 'Name', 'Description', 'File', 'Module/Class', 'Line Number', 'Severity', 'Related Participants']
+        fieldnames = ['Type', 'Name', 'Description', 'File', 'Module/Class', 'Line Number', 'Severity', 'Related Participants', 'Importers By Participant', 'Participant Dependency Edges']
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
 
@@ -396,7 +396,9 @@ def generate_csv_report(code_smells, architectural_smells, structural_smells, cs
                 'Module/Class': smell.module_class,
                 'Line Number': smell.line_number,
                 'Severity': smell.severity,
-                'Related Participants': '[]'  # Not supported for structura smells yet
+                'Related Participants': '[]',  # Not supported for structural smells yet
+                'Importers By Participant': '{}',
+                'Participant Dependency Edges': '[]'
             })
 
         # Write code smells
@@ -409,7 +411,9 @@ def generate_csv_report(code_smells, architectural_smells, structural_smells, cs
                 'Module/Class': smell.module_class,
                 'Line Number': smell.line_number,
                 'Severity': smell.severity,
-                'Related Participants': '[]'  # Not supported for code smells yet
+                'Related Participants': '[]',  # Not supported for code smells yet
+                'Importers By Participant': '{}',
+                'Participant Dependency Edges': '[]'
             })
 
         # Write architectural smells
@@ -430,6 +434,16 @@ def generate_csv_report(code_smells, architectural_smells, structural_smells, cs
                         participant_data['end_line'] = participant.end_line
                     participants_json.append(participant_data)
 
+            # Format importers_by_participant as JSON object
+            importers_json = {}
+            if hasattr(smell, 'importers_by_participant') and smell.importers_by_participant:
+                importers_json = smell.importers_by_participant
+
+            # Format participant_dependency_edges as JSON array of [src, dst] pairs
+            edges_json = []
+            if hasattr(smell, 'participant_dependency_edges') and smell.participant_dependency_edges:
+                edges_json = [[src, dst] for src, dst in smell.participant_dependency_edges]
+
             writer.writerow({
                 'Type': 'Architectural',
                 'Name': smell.name,
@@ -438,7 +452,9 @@ def generate_csv_report(code_smells, architectural_smells, structural_smells, cs
                 'Module/Class': smell.module_class,
                 'Line Number': smell.line_number,
                 'Severity': smell.severity,
-                'Related Participants': json.dumps(participants_json, ensure_ascii=True)
+                'Related Participants': json.dumps(participants_json, ensure_ascii=True),
+                'Importers By Participant': json.dumps(importers_json, ensure_ascii=True),
+                'Participant Dependency Edges': json.dumps(edges_json, ensure_ascii=True)
             })
 
     logger.info(f"CSV report generated and saved to {csv_file}")
