@@ -28,7 +28,7 @@ def test_detect_god_object(architectural_smell_detector, tmp_path):
             break
     
     assert god_object_smell is not None, "God Object smell not detected"
-    assert god_object_smell.module_class == "test_detect_god_object0.god_object"
+    assert god_object_smell.module_class == "god_object"
     assert god_object_smell.file_path == str(test_file)
     
     # Verify related_participants exists (it might be empty since there are no dependencies in test)
@@ -93,7 +93,7 @@ def test_detect_redundant_abstraction(architectural_smell_detector, tmp_path):
     redundant_module = redundant_smell.related_participants[0]
     assert redundant_module.element_type == "module"
     assert "Redundant with" in redundant_module.role_in_smell
-    assert redundant_module.element_name in ["test_detect_redundant_abstract0.module1", "test_detect_redundant_abstract0.module2"]
+    assert redundant_module.element_name in ["module1", "module2"]
     
     # Check function participants
     function_participants = [p for p in redundant_smell.related_participants[1:] 
