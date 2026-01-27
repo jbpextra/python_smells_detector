@@ -459,7 +459,7 @@ def generate_report(code_smells, architectural_smells, structural_smells,
 def _csv_participants(smell):
     """Keep the participant CSV contract (including its historical ``role`` key)."""
     participants = []
-    for participant in getattr(smell, 'related_participants', ()):
+    for participant in getattr(smell, 'related_participants', ()) or ():
         item = {
             'element_name': participant.element_name,
             'element_type': participant.element_type,
@@ -493,7 +493,9 @@ def generate_csv_report(code_smells, architectural_smells, structural_smells, cs
             'Module/Class',
             'Line Number',
             'Severity',
-            'Related Participants']
+            'Related Participants',
+            'Importers By Participant',
+            'Participant Dependency Edges']
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
 
@@ -511,6 +513,12 @@ def generate_csv_report(code_smells, architectural_smells, structural_smells, cs
                     'Related Participants': json.dumps(
                         _csv_participants(smell) if label == 'Architectural' else [],
                         ensure_ascii=True),
+                    'Importers By Participant': json.dumps(
+                        (getattr(smell, 'importers_by_participant', None) or {})
+                        if label == 'Architectural' else {}, ensure_ascii=True),
+                    'Participant Dependency Edges': json.dumps(
+                        (getattr(smell, 'participant_dependency_edges', None) or [])
+                        if label == 'Architectural' else [], ensure_ascii=True),
                 })
 
     logger.info(f"CSV report generated and saved to {csv_file}")

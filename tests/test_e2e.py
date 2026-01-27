@@ -52,8 +52,17 @@ def test_report_schema(report):
         expected = {"type", "name", "description", "file_path",
                     "module_class", "line_number", "severity"}
         if finding["type"] == "Architectural":
-            expected.add("related_participants")
+            expected.update({"related_participants", "importers_by_participant",
+                             "participant_dependency_edges"})
             assert isinstance(finding["related_participants"], list)
+            assert isinstance(finding["importers_by_participant"], dict)
+            assert isinstance(finding["participant_dependency_edges"], list)
+            for participant in finding["related_participants"]:
+                assert set(participant) == {"file_path", "element_name", "element_type",
+                                           "role_in_smell", "start_line", "end_line"}
+            for edge in finding["participant_dependency_edges"]:
+                assert isinstance(edge, list) and len(edge) == 2
+                assert all(isinstance(path, str) for path in edge)
         assert set(finding) == expected
         assert finding["severity"] in ("low", "medium", "high")
 

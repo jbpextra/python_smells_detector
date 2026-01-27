@@ -3,7 +3,7 @@ import logging
 import os
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import networkx as nx
 from tqdm import tqdm
@@ -45,6 +45,8 @@ class ArchitecturalSmell:
     line_number: int = None
     severity: str = 'medium'
     related_participants: List[SmellParticipant] = field(default_factory=list)
+    importers_by_participant: Dict[str, List[str]] = field(default_factory=dict)
+    participant_dependency_edges: List[Tuple[str, str]] = field(default_factory=list)
 
 
 class ArchitecturalSmellDetector:
@@ -77,7 +79,7 @@ class ArchitecturalSmellDetector:
         self.module_functions = defaultdict(set)
         self.api_usage = defaultdict(list)
         self.function_calls = defaultdict(set)  # canonical (module, function) call targets
-        self._call_targets = {}  # module -> qualified names collected before import resolution
+        self._call_targets = {}  # module -> ordered candidate groups for imported calls
         self.thresholds = thresholds
         self.file_paths = {}  # New attribute to store file paths
         self.external_dependencies = defaultdict(set)
@@ -199,8 +201,9 @@ class ArchitecturalSmellDetector:
                 target = target.value
             if isinstance(target, ast.Name) and target.id in bindings:
                 suffix = '.'.join(reversed(parts))
-                for imported in bindings[target.id]:
-                    call_targets.add(f"{imported}.{suffix}" if suffix else imported)
+                call_targets.add(tuple(
+                    f"{imported}.{suffix}" if suffix else imported
+                    for imported in bindings[target.id]))
         self._call_targets[module_name] = sorted(call_targets)
 
     def resolve_external_dependencies(self):
@@ -219,11 +222,94 @@ class ArchitecturalSmellDetector:
                     self.module_dependencies.add_edge(module, target)
 
         for module, calls in self._call_targets.items():
-            for qualified_name in calls:
-                target_name, separator, function = qualified_name.rpartition('.')
-                target = index.resolve([target_name]) if separator else None
-                if target and function in self.module_functions[target]:
-                    self.function_calls[module].add((target, function))
+            for candidates in calls:
+                for qualified_name in candidates:
+                    target_name, separator, function = qualified_name.rpartition('.')
+                    target = index.resolve([target_name]) if separator else None
+                    if target is not None:
+                        if function in self.module_functions[target]:
+                            self.function_calls[module].add((target, function))
+                        # A resolved imported module wins over its package fallback,
+                        # even when this call does not name a module-level function.
+                        break
+
+    def _compute_importers_by_participant(self, participants: List[SmellParticipant]) -> Dict[str, List[str]]:
+        """
+        Compute which repo files import each participant file.
+
+        Args:
+            participants: List of SmellParticipant objects involved in the smell
+
+        Returns:
+            Dict mapping participant file paths to lists of importer file paths
+        """
+        importers_by_participant = {}
+
+        # Build reverse mapping: file_path -> module_name
+        file_to_module = {v: k for k, v in self.file_paths.items()}
+
+        for participant in participants:
+            participant_file = participant.file_path
+
+            # Skip external dependencies, unknown files, or already processed
+            if participant_file in ("External Library", "Unknown"):
+                continue
+            if participant_file in importers_by_participant:
+                continue  # Already processed this file
+
+            # Derive module from file path
+            module_name = file_to_module.get(participant_file)
+            if not module_name or module_name not in self.module_dependencies:
+                continue
+
+            # Find all modules that import this participant
+            importers = []
+            for predecessor in self.module_dependencies.predecessors(module_name):
+                predecessor_file = self.file_paths.get(predecessor, "Unknown")
+                if predecessor_file != "Unknown":
+                    importers.append(predecessor_file)
+
+            importers_by_participant[participant_file] = sorted(set(importers))
+
+        return importers_by_participant
+
+    def _compute_participant_dependency_edges(self, participants: List[SmellParticipant]) -> List[Tuple[str, str]]:
+        """
+        Compute directed dependency edges among participant files.
+
+        Args:
+            participants: List of SmellParticipant objects involved in the smell
+
+        Returns:
+            List of (src_file, dst_file) tuples representing edges where src imports dst
+        """
+        # Build reverse mapping: file_path -> module_name
+        file_to_module = {v: k for k, v in self.file_paths.items()}
+
+        # Collect unique participant files and their modules
+        participant_files = set()
+        file_to_module_filtered = {}
+
+        for participant in participants:
+            participant_file = participant.file_path
+            if participant_file in ("External Library", "Unknown"):
+                continue
+
+            module_name = file_to_module.get(participant_file)
+            if module_name and module_name in self.module_dependencies:
+                participant_files.add(participant_file)
+                file_to_module_filtered[participant_file] = module_name
+
+        # Find edges where both source and target are participant files
+        edges = []
+        for src_file in participant_files:
+            src_module = file_to_module_filtered[src_file]
+            for successor in self.module_dependencies.successors(src_module):
+                dst_file = self.file_paths.get(successor)
+                if dst_file in participant_files:
+                    edges.append((src_file, dst_file))
+
+        return sorted(edges)
 
     def add_smell(self, name, description, file_path, module_class,
                   line_number=None, severity='medium', related_participants=None):
@@ -239,6 +325,9 @@ class ArchitecturalSmellDetector:
             severity (str, optional): The severity level of the smell (default: 'medium')
             related_participants (list, optional): Other elements involved in this finding.
         """
+        participants = list(related_participants or [])
+        importers = self._compute_importers_by_participant(participants)
+        edges = self._compute_participant_dependency_edges(participants)
         self.architectural_smells.append(ArchitecturalSmell(
             name=name,
             description=description,
@@ -246,7 +335,9 @@ class ArchitecturalSmellDetector:
             module_class=module_class,
             line_number=line_number,
             severity=severity,
-            related_participants=list(related_participants or [])
+            related_participants=participants,
+            importers_by_participant=importers,
+            participant_dependency_edges=edges
         ))
 
     def _core_graph(self):
@@ -659,8 +750,9 @@ class ArchitecturalSmellDetector:
                 # Track outgoing dependencies (what this module depends on)
                 for successor in sorted(self.module_dependencies.successors(node)):
                     successor_file = self.file_paths.get(successor, "Unknown")
-                    successor_in_degree = self.module_dependencies.in_degree(successor)
-                    successor_out_degree = self.module_dependencies.out_degree(successor)
+                    participant_graph = graph if successor in graph else self.module_dependencies
+                    successor_in_degree = participant_graph.in_degree(successor)
+                    successor_out_degree = participant_graph.out_degree(successor)
                     successor_total = successor_in_degree + successor_out_degree
                     successor_instability = successor_out_degree / successor_total if successor_total > 0 else 0
 

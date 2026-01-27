@@ -610,11 +610,34 @@ The tool produces these output types:
 |--------|--------------|----------|
 | **Console** | Default (no `--output`) | Human-readable report printed to stdout |
 | **Text file** (`*.txt`) | `--output <name>` | Same human-readable report, saved to `<name>.txt` |
-| **CSV file** (`*.csv`) | `--output <name>` | One row per smell: Type, Name, Description, File, Module/Class, Line Number, Severity |
+| **CSV file** (`*.csv`) | `--output <name>` | One row per smell: Type, Name, Description, File, Module/Class, Line Number, Severity, Related Participants, Importers By Participant, Participant Dependency Edges |
 | **JSON** | `--format json` | One report document (see [Agents, scripts and test harnesses](#agents-scripts-and-test-harnesses)) |
 | **Log file** (`code_analysis.log`) | Text mode only | Detailed analysis trace, warnings, and parse errors |
 
 The CSV is useful for importing into spreadsheets, dashboards, or CI tools for trend tracking.
+
+Architectural findings retain the fork's participant reporting contract:
+
+- `Related Participants` is a JSON array with `element_name`, `element_type`,
+  `role`, and `file_path`; `start_line` and `end_line` appear when available.
+- `Importers By Participant` is a JSON object mapping each known participant file
+  to the sorted, unique project files that import it, including importers outside
+  the finding. A participant with no importers maps to an empty array.
+- `Participant Dependency Edges` is a sorted JSON array of `[source, target]`
+  file pairs where source imports target and both files are participants.
+  Multiple participant elements in one file do not duplicate edges. External
+  libraries and unknown files are omitted from the importer and edge metadata.
+
+Code and structural CSV rows use `[]`, `{}`, and `[]` respectively for these
+three columns. Text reports include participant names, roles, files and optional
+line ranges. JSON/API architectural findings expose `related_participants`,
+`importers_by_participant`, and `participant_dependency_edges`; the participant
+dataclass uses `role_in_smell` in this format and nullable line fields. The CSV
+retains its established `role` key and omits unavailable line fields.
+
+Upstream's corrected detection rules still determine which findings are reported.
+Cyclic dependency findings now cover a strongly connected component; their
+participants include every module in that component, not just the example cycle.
 
 ---
 
@@ -775,7 +798,7 @@ they need more.
 
 | Workflow | File | Trigger | What it does |
 |----------|------|---------|--------------|
-| **CI** | `ci.yml` | push / PR to `main`/`dev`, manual, and called by Release | `uv lock --check` + ruff; tests on Python 3.10–3.14 (Linux) and 3.13 (Windows, macOS) from the exact lockfile, with coverage (gate: 85%) on one leg; tests on the **oldest** declared dependency versions; the docs built exactly as Read the Docs builds them, warnings as errors; the tool analyzing its own `src/` (no file may fail to parse); `pip-audit`; then builds the sdist and wheel, `twine check --strict`s them and smoke-tests the installed wheel on its own (version, bundled config, JSON report, exit codes). |
+| **CI** | `ci.yml` | push / PR to `main`/`dev`/`development`, manual, and called by Release | `uv lock --check` + ruff; tests on Python 3.10–3.14 (Linux) and 3.13 (Windows, macOS) from the exact lockfile, with coverage (gate: 85%) on one leg; tests on the **oldest** declared dependency versions; the docs built exactly as Read the Docs builds them, warnings as errors; the tool analyzing its own `src/` (no file may fail to parse); `pip-audit`; then builds the sdist and wheel, `twine check --strict`s them and smoke-tests the installed wheel on its own (version, bundled config, JSON report, exit codes). |
 | **Release** | `publish.yml` | GitHub Release published (or manual dry run) | Checks the tag matches `pyproject.toml` and that `CHANGELOG.md` has an entry, runs the whole CI workflow, publishes the very `dist` CI built and tested to PyPI via Trusted Publishing (OIDC, PEP 740 attestations), and attaches the same files to the GitHub Release. A manual run stops before publishing. |
 | **CodeQL** | `codeql.yml` | push / PR + weekly | GitHub static security analysis of the Python source. |
 
