@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 import sys
 import importlib.util
 import logging
-from typing import List, Optional
+from typing import List, Optional, Dict, Tuple
 from .exceptions import CodeAnalysisError
 
 # Set up logger
@@ -48,6 +48,8 @@ class ArchitecturalSmell:
     line_number: int = None
     severity: str = 'medium'
     related_participants: List[SmellParticipant] = field(default_factory=list)
+    importers_by_participant: Dict[str, List[str]] = field(default_factory=dict)
+    participant_dependency_edges: List[Tuple[str, str]] = field(default_factory=list)
 
 class ArchitecturalSmellDetector:
     """
@@ -267,6 +269,84 @@ class ArchitecturalSmellDetector:
                        not self.module_dependencies.out_edges(dependency):
                         self.module_dependencies.remove_node(dependency)
 
+    def _compute_importers_by_participant(self, participants: List[SmellParticipant]) -> Dict[str, List[str]]:
+        """
+        Compute which repo files import each participant file.
+
+        Args:
+            participants: List of SmellParticipant objects involved in the smell
+
+        Returns:
+            Dict mapping participant file paths to lists of importer file paths
+        """
+        importers_by_participant = {}
+
+        # Build reverse mapping: file_path -> module_name
+        file_to_module = {v: k for k, v in self.file_paths.items()}
+
+        for participant in participants:
+            participant_file = participant.file_path
+
+            # Skip external dependencies, unknown files, or already processed
+            if participant_file in ("External Library", "Unknown"):
+                continue
+            if participant_file in importers_by_participant:
+                continue  # Already processed this file
+
+            # Derive module from file path
+            module_name = file_to_module.get(participant_file)
+            if not module_name or module_name not in self.module_dependencies:
+                continue
+
+            # Find all modules that import this participant
+            importers = []
+            for predecessor in self.module_dependencies.predecessors(module_name):
+                predecessor_file = self.file_paths.get(predecessor, "Unknown")
+                if predecessor_file != "Unknown":
+                    importers.append(predecessor_file)
+
+            importers_by_participant[participant_file] = sorted(set(importers))
+
+        return importers_by_participant
+
+    def _compute_participant_dependency_edges(self, participants: List[SmellParticipant]) -> List[Tuple[str, str]]:
+        """
+        Compute directed dependency edges among participant files.
+
+        Args:
+            participants: List of SmellParticipant objects involved in the smell
+
+        Returns:
+            List of (src_file, dst_file) tuples representing edges where src imports dst
+        """
+        # Build reverse mapping: file_path -> module_name
+        file_to_module = {v: k for k, v in self.file_paths.items()}
+
+        # Collect unique participant files and their modules
+        participant_files = set()
+        file_to_module_filtered = {}
+
+        for participant in participants:
+            participant_file = participant.file_path
+            if participant_file in ("External Library", "Unknown"):
+                continue
+
+            module_name = file_to_module.get(participant_file)
+            if module_name and module_name in self.module_dependencies:
+                participant_files.add(participant_file)
+                file_to_module_filtered[participant_file] = module_name
+
+        # Find edges where both source and target are participant files
+        edges = []
+        for src_file in participant_files:
+            src_module = file_to_module_filtered[src_file]
+            for successor in self.module_dependencies.successors(src_module):
+                dst_file = self.file_paths.get(successor)
+                if dst_file in participant_files:
+                    edges.append((src_file, dst_file))
+
+        return sorted(edges)
+
     def add_smell(self, name, description, file_path, module_class, line_number=None,
                   severity='medium', related_participants=None):
         """
@@ -284,6 +364,10 @@ class ArchitecturalSmellDetector:
         if related_participants is None:
             related_participants = []
 
+        # Compute importers and dependency edges for participants
+        importers_by_participant = self._compute_importers_by_participant(related_participants)
+        participant_dependency_edges = self._compute_participant_dependency_edges(related_participants)
+
         self.architectural_smells.append(ArchitecturalSmell(
             name=name,
             description=description,
@@ -291,7 +375,9 @@ class ArchitecturalSmellDetector:
             module_class=module_class,
             line_number=line_number,
             severity=severity,
-            related_participants=related_participants
+            related_participants=related_participants,
+            importers_by_participant=importers_by_participant,
+            participant_dependency_edges=participant_dependency_edges
         ))
 
     def detect_hub_like_dependency(self):
