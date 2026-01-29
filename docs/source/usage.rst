@@ -45,6 +45,9 @@ Configure analysis with additional options:
    # Enable debug logging
    analyze_code_quality /path/to/project --debug
 
+   # Exclude paths using git-style patterns
+   analyze_code_quality /path/to/project --pathspec "docs/" --pathspec-file .gitignore
+
    # Combine multiple options
    analyze_code_quality /path/to/project --config custom_config.yaml --output report.txt --debug
 
@@ -56,6 +59,11 @@ The tool generates reports in multiple formats:
 * Text report (default): Detailed human-readable analysis
 * CSV report: Structured data for further processing
 * Log file: Detailed analysis process and any errors encountered
+
+Path Exclusions
+---------------
+
+Use the ``--pathspec`` option to skip files or directories with git-style patterns. Repeat the flag to add multiple patterns, or use ``--pathspec-file`` to load patterns from gitignore-style files such as ``.gitignore`` or ``.codequalityignore``.
 
 Example Output
 ------------

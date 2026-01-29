@@ -2,11 +2,13 @@ import os
 import argparse
 import csv
 import logging
+from typing import Optional
 from .code_smell_detector import CodeSmellDetector
 from .architectural_smell_detector import ArchitecturalSmellDetector
 from .structural_smell_detector import StructuralSmellDetector
 from .config_handler import ConfigHandler
 from .exceptions import CodeAnalysisError
+from .path_filters import compile_pathspec, filter_child_directories, should_ignore
 
 # Set up logging
 logging.basicConfig(
@@ -19,7 +21,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def analyze_code_smells(directory_path, detector):
+def analyze_code_smells(directory_path, detector, pathspec: Optional["PathSpec"] = None):
     """
     Analyze a directory for code smells using the provided detector.
 
@@ -36,10 +38,15 @@ def analyze_code_smells(directory_path, detector):
     
     print(f"\nStarting code smell analysis for directory: {directory_path}")
     
-    for root, _, files in os.walk(directory_path):
+    base_dir = os.path.abspath(directory_path)
+
+    for root, dirs, files in os.walk(base_dir):
+        filter_child_directories(dirs, root, base_dir, pathspec)
         for file in files:
             if file.endswith('.py'):
                 file_path = os.path.join(root, file)
+                if should_ignore(pathspec, base_dir, file_path):
+                    continue
                 try:
                     detector.detect_smells(file_path)
                     files_analyzed += 1
@@ -90,7 +97,7 @@ Function: {error['function']}
 
     return detector.code_smells
 
-def analyze_architectural_smells(directory_path, detector):
+def analyze_architectural_smells(directory_path, detector, pathspec: Optional["PathSpec"] = None):
     """
     Analyze a directory for architectural smells using the provided detector.
 
@@ -105,7 +112,7 @@ def analyze_architectural_smells(directory_path, detector):
     try:
         print(f"\nStarting architectural smell analysis for directory: {directory_path}")
         
-        detector.detect_smells(directory_path)
+        detector.detect_smells(directory_path, pathspec=pathspec)
         
         smell_count = len(detector.architectural_smells)
         print(f"\nArchitectural smell analysis complete. Found {smell_count} smells.")
@@ -162,6 +169,18 @@ def analyze_project(debug=False, smell_type=None):
     parser.add_argument("--debug", action="store_true", help="Enable debug mode")
     parser.add_argument("--type", choices=['code', 'architectural', 'structural'], 
                        help="Type of smell to analyze (default: all)")
+    parser.add_argument(
+        "--pathspec",
+        action="append",
+        default=[],
+        help="Git-style pathspec pattern to exclude from analysis (relative to the provided directory).",
+    )
+    parser.add_argument(
+        "--pathspec-file",
+        action="append",
+        default=[],
+        help="File containing gitignore-style pathspecs to exclude from analysis. Can be provided multiple times.",
+    )
     args = parser.parse_args()
 
     if args.debug or debug:
@@ -169,6 +188,7 @@ def analyze_project(debug=False, smell_type=None):
         logger.debug("Debug mode enabled")
 
     smell_type = args.type or smell_type
+    pathspec = compile_pathspec(args.pathspec, args.pathspec_file)
     
     # Determine output filenames based on the --output argument
     if args.output:
@@ -190,17 +210,17 @@ def analyze_project(debug=False, smell_type=None):
         if smell_type in [None, 'code']:
             print("Analyzing Code Smells...")
             code_detector = CodeSmellDetector(config_handler.get_thresholds('code_smells'))
-            code_smells = analyze_code_smells(args.directory, code_detector)
+            code_smells = analyze_code_smells(args.directory, code_detector, pathspec)
 
         if smell_type in [None, 'architectural']:
             print("Analyzing Architectural Smells...")
             arch_detector = ArchitecturalSmellDetector(config_handler.get_thresholds('architectural_smells'))
-            architectural_smells = analyze_architectural_smells(args.directory, arch_detector)
+            architectural_smells = analyze_architectural_smells(args.directory, arch_detector, pathspec)
 
         if smell_type in [None, 'structural']:
             print("Analyzing Structural Smells...")
             struct_detector = StructuralSmellDetector(config_handler.get_thresholds('structural_smells'))
-            structural_smells = analyze_structural_smells(args.directory, struct_detector)
+            structural_smells = analyze_structural_smells(args.directory, struct_detector, pathspec)
 
         generate_report(code_smells, architectural_smells, structural_smells, 
                        output_txt, output_csv)
@@ -209,7 +229,7 @@ def analyze_project(debug=False, smell_type=None):
         logger.error(f"Error during analysis: {str(e)}", exc_info=True)
         raise
 
-def analyze_structural_smells(directory_path, detector):
+def analyze_structural_smells(directory_path, detector, pathspec: Optional["PathSpec"] = None):
     """
     Analyze a directory for structural smells using the provided detector.
 
@@ -225,7 +245,7 @@ def analyze_structural_smells(directory_path, detector):
     print(f"\nStarting structural smell analysis for directory: {directory_path}")
     
     try:
-        detector.detect_smells(directory_path)
+        detector.detect_smells(directory_path, pathspec=pathspec)
         print(f"Successfully analyzed: {directory_path}")
         
     except CodeAnalysisError as e:
@@ -254,7 +274,12 @@ def analyze_structural_smells(directory_path, detector):
 
     return detector.structural_smells
 
-def analyze_structural_smells_only(directory_path, config_path="code_quality_config.yaml", output=None):
+def analyze_structural_smells_only(
+    directory_path,
+    config_path="code_quality_config.yaml",
+    output=None,
+    pathspec: Optional["PathSpec"] = None,
+):
     """
     Analyze only structural smells in a Python project.
 
@@ -267,7 +292,7 @@ def analyze_structural_smells_only(directory_path, config_path="code_quality_con
         struct_detector = StructuralSmellDetector(config_handler.get_thresholds('structural_smells'))
         
         print("Analyzing Structural Smells...")
-        structural_smells = analyze_structural_smells(directory_path, struct_detector)
+        structural_smells = analyze_structural_smells(directory_path, struct_detector, pathspec)
         
         # Use provided output filename or default
         if output:
@@ -402,7 +427,11 @@ def generate_csv_report(code_smells, architectural_smells, structural_smells, cs
 
     logger.info(f"CSV report generated and saved to {csv_file}")
 
-def analyze_code_smells_only(directory_path, config_path="code_quality_config.yaml"):
+def analyze_code_smells_only(
+    directory_path,
+    config_path="code_quality_config.yaml",
+    pathspec: Optional["PathSpec"] = None,
+):
     """
     Analyze only code smells in a Python project.
     
@@ -415,7 +444,7 @@ def analyze_code_smells_only(directory_path, config_path="code_quality_config.ya
         code_detector = CodeSmellDetector(config_handler.get_thresholds('code_smells'))
         
         print("Analyzing Code Smells...")
-        code_smells = analyze_code_smells(directory_path, code_detector)
+        code_smells = analyze_code_smells(directory_path, code_detector, pathspec)
         
         generate_report(code_smells, [], [], "code_smells_report.txt")
         return code_smells
@@ -424,7 +453,11 @@ def analyze_code_smells_only(directory_path, config_path="code_quality_config.ya
         logger.error(f"Error analyzing code smells: {str(e)}", exc_info=True)
         raise
 
-def analyze_architectural_smells_only(directory_path, config_path="code_quality_config.yaml"):
+def analyze_architectural_smells_only(
+    directory_path,
+    config_path="code_quality_config.yaml",
+    pathspec: Optional["PathSpec"] = None,
+):
     """
     Analyze only architectural smells in a Python project.
     
@@ -437,7 +470,7 @@ def analyze_architectural_smells_only(directory_path, config_path="code_quality_
         arch_detector = ArchitecturalSmellDetector(config_handler.get_thresholds('architectural_smells'))
         
         print("Analyzing Architectural Smells...")
-        architectural_smells = analyze_architectural_smells(directory_path, arch_detector)
+        architectural_smells = analyze_architectural_smells(directory_path, arch_detector, pathspec)
         
         generate_report([], architectural_smells, [], "architectural_smells_report.txt")
         return architectural_smells
@@ -454,8 +487,21 @@ if __name__ == "__main__":
     parser.add_argument("--type", choices=['code', 'architectural', 'structural'], 
                        help="Type of smell to analyze (default: all)")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode")
+    parser.add_argument(
+        "--pathspec",
+        action="append",
+        default=[],
+        help="Git-style pathspec pattern to exclude from analysis (relative to the provided directory).",
+    )
+    parser.add_argument(
+        "--pathspec-file",
+        action="append",
+        default=[],
+        help="File containing gitignore-style pathspecs to exclude from analysis. Can be provided multiple times.",
+    )
     
     args = parser.parse_args()
+    cli_pathspec = compile_pathspec(args.pathspec, args.pathspec_file)
     
     # Determine output filenames based on the --output argument
     if args.output:
@@ -467,11 +513,10 @@ if __name__ == "__main__":
         output_csv = "code_quality_report.csv"
     
     if args.type == 'structural':
-        analyze_structural_smells_only(args.directory, args.config, args.output)
+        analyze_structural_smells_only(args.directory, args.config, args.output, cli_pathspec)
     elif args.type == 'code':
-        analyze_code_smells_only(args.directory, args.config, args.output)
+        analyze_code_smells_only(args.directory, args.config, cli_pathspec)
     elif args.type == 'architectural':
-        analyze_architectural_smells_only(args.directory, args.config, args.output)
+        analyze_architectural_smells_only(args.directory, args.config, cli_pathspec)
     else:
         analyze_project(args.debug, args.type)
-

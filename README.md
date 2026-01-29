@@ -42,6 +42,7 @@ A comprehensive Python code quality analysis tool that detects code smells, arch
 Download the repository
 cd  "the_repository"
 pip install -e .
+pip install -r requirements.txt  # Installs only the runtime dependencies
 ```
 
 ## Usage
@@ -70,8 +71,12 @@ Additional options:
 analyze_code_quality /path/to/project \
     --config custom_config.yaml \
     --output report \
-    --debug
+    --debug \
+    --pathspec "tests/" \
+    --pathspec-file .gitignore
 ```
+
+Use ``--pathspec`` to exclude specific files or directories with git-style patterns (the option can be repeated). ``--pathspec-file`` accepts gitignore-style files—pass it multiple times to layer exclusions such as ``.gitignore`` and ``.codequalityignore``. Patterns are resolved relative to the analyzed directory.
 
 ### Configuration
 
@@ -87,6 +92,8 @@ code_smells:
     explanation: "Classes with more than this many methods may have too many responsibilities"
   # ... other thresholds
 ```
+
+> **Note:** If `code_quality_config.yaml` is missing from your working directory, the CLI automatically loads the packaged default before analyzing code. Provide `--config /path/to/config.yaml` to use a custom configuration.
 
 ### Output Formats
 
@@ -141,7 +148,11 @@ Contributions are welcome! Please feel free to submit a Pull Request. For major 
    ```bash
    pip install -e ".[dev]"
    ```
-4. Run tests:
+4. Format code before sending changes:
+   ```bash
+   black src tests
+   ```
+5. Run tests:
    ```bash
    pytest tests/
    ```

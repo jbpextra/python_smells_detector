@@ -1,5 +1,8 @@
+import os
 import yaml
 import logging
+import warnings
+import importlib.resources as pkg_resources
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +27,7 @@ class ConfigHandler:
         Load threshold values from the YAML configuration file.
         """
         try:
-            with open(self.config_path, 'r') as file:
+            with open(self.config_path, 'r', encoding='utf-8') as file:
                 config = yaml.safe_load(file)
                 
             logger.info(f"Loading configuration from: {self.config_path}")
@@ -39,6 +42,13 @@ class ConfigHandler:
             return thresholds
             
         except FileNotFoundError:
+            logger.warning(
+                "Configuration file not found at '%s'. Attempting to load packaged default.",
+                self.config_path,
+            )
+            thresholds = self._load_packaged_config()
+            if thresholds is not None:
+                return thresholds
             logger.error(f"Configuration file not found: {self.config_path}")
             raise
         except yaml.YAMLError as e:
@@ -47,6 +57,43 @@ class ConfigHandler:
         except Exception as e:
             logger.error(f"Unexpected error loading configuration: {str(e)}")
             raise
+
+    def _load_packaged_config(self):
+        """Attempt to load the default configuration shipped with the package."""
+        default_name = os.path.basename(self.config_path)
+        if default_name != 'code_quality_config.yaml':
+            return None
+
+        try:
+            config, resource_path = self._read_packaged_config(default_name)
+
+            thresholds = {
+                'code_smells': {k: v['value'] for k, v in config.get('code_smells', {}).items()},
+                'architectural_smells': {k: v['value'] for k, v in config.get('architectural_smells', {}).items()},
+                'structural_smells': {k: v['value'] for k, v in config.get('structural_smells', {}).items()}
+            }
+            self.config_path = resource_path
+            return thresholds
+        except FileNotFoundError:
+            logger.error("Packaged default configuration '%s' is missing.", default_name)
+        except Exception as exc:
+            logger.error("Failed to load packaged configuration '%s': %s", default_name, exc)
+        return None
+
+    def _read_packaged_config(self, resource_name):
+        """Load a packaged resource, falling back for older Python versions."""
+        files_accessor = getattr(pkg_resources, 'files', None)
+
+        if callable(files_accessor):
+            resource = files_accessor('code_quality_analyzer').joinpath(resource_name)
+            with resource.open('r', encoding='utf-8') as file:
+                return yaml.safe_load(file), str(resource)
+
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', DeprecationWarning)
+            with pkg_resources.path('code_quality_analyzer', resource_name) as resource:
+                with open(resource, 'r', encoding='utf-8') as file:
+                    return yaml.safe_load(file), str(resource)
 
     def _validate_thresholds(self):
         """

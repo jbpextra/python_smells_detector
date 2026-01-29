@@ -22,6 +22,7 @@ From Source
    Download the repository
    cd  "the_repository"
    pip install -e .
+   pip install -r requirements.txt  # install runtime dependencies only
 
 Development Installation
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -30,4 +31,4 @@ For development, install with additional dependencies:
 
 .. code-block:: bash
 
-   pip install -e ".[dev]" 
+   pip install -e ".[dev]"
