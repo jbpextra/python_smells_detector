@@ -13,7 +13,7 @@ setup(
     ],
     python_requires=">=3.7",
     include_package_data=True,
-    package_data={"code_quality_analyzer": ["code_quality_config.yaml"]},
+    package_data={"code_quality_analyzer": ["code_quality_config.yaml", "py.typed"]},
     entry_points={
         "console_scripts": [
             "analyze_code_quality=code_quality_analyzer.main:analyze_project",
