@@ -32,6 +32,7 @@ setup(
             'pytest',
             'sphinx',
             'sphinx-rtd-theme',
+            'black',
         ],
     },
 )

@@ -141,7 +141,11 @@ Contributions are welcome! Please feel free to submit a Pull Request. For major 
    ```bash
    pip install -e ".[dev]"
    ```
-4. Run tests:
+4. Format code before sending changes:
+   ```bash
+   black src tests
+   ```
+5. Run tests:
    ```bash
    pytest tests/
    ```
