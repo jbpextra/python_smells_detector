@@ -9,6 +9,7 @@ setup(
         "astroid>=3.0",
         "networkx>=3.1",
         "pyyaml>=6.0",
+        "pathspec>=0.12",
     ],
     python_requires=">=3.7",
     include_package_data=True,

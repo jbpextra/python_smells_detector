@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import yaml
 import logging
 from .exceptions import CodeAnalysisError
+from .path_filters import filter_child_directories, should_ignore
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -62,6 +63,7 @@ class StructuralSmellDetector:
         self.thresholds = self.load_thresholds(config)
         self.project_root = None
         self.file_paths = {}
+        self.pathspec = None
 
     def load_thresholds(self, config):
         """
@@ -85,10 +87,9 @@ class StructuralSmellDetector:
         else:
             raise ValueError("Config must be either a dictionary or a file path string")
 
-    def detect_smells(self, directory_path):
-        """
-        Detect structural smells in the given directory.
-        """
+    def detect_smells(self, directory_path, pathspec=None):
+        """Detect structural smells in the given directory."""
+        self.pathspec = pathspec
         detection_methods = [
             (self.detect_nom, "detect_nom"),
             (self.detect_lcom, "detect_lcom"),
@@ -144,26 +145,31 @@ class StructuralSmellDetector:
         self.project_root = os.path.abspath(directory_path)
         files_analyzed = 0
         files_with_errors = 0
-        
+
         logger.info(f"Starting analysis of directory: {directory_path}")
-        
-        for root, _, files in os.walk(directory_path):
+
+        for root, dirs, files in os.walk(self.project_root):
+            filter_child_directories(dirs, root, self.project_root, self.pathspec)
             for file in files:
-                if file.endswith('.py'):
-                    file_path = os.path.join(root, file)
-                    try:
-                        self.analyze_file(file_path)
-                        files_analyzed += 1
-                        logger.debug(f"Successfully analyzed: {file_path}")
-                    except CodeAnalysisError as e:
-                        files_with_errors += 1
-                        logger.warning(f"Error analyzing {file_path}: {str(e)}")
-                        # Continue with next file instead of stopping
-                        continue
-                    except Exception as e:
-                        files_with_errors += 1
-                        logger.error(f"Unexpected error analyzing {file_path}: {str(e)}")
-                        continue
+                if not file.endswith('.py'):
+                    continue
+
+                file_path = os.path.join(root, file)
+                if should_ignore(self.pathspec, self.project_root, file_path):
+                    continue
+
+                try:
+                    self.analyze_file(file_path)
+                    files_analyzed += 1
+                    logger.debug(f"Successfully analyzed: {file_path}")
+                except CodeAnalysisError as e:
+                    files_with_errors += 1
+                    logger.warning(f"Error analyzing {file_path}: {str(e)}")
+                    continue
+                except Exception as e:
+                    files_with_errors += 1
+                    logger.error(f"Unexpected error analyzing {file_path}: {str(e)}")
+                    continue
 
         # Log analysis summary
         logger.info(f"""

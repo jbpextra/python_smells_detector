@@ -71,8 +71,12 @@ Additional options:
 analyze_code_quality /path/to/project \
     --config custom_config.yaml \
     --output report \
-    --debug
+    --debug \
+    --pathspec "tests/" \
+    --pathspec-file .gitignore
 ```
+
+Use ``--pathspec`` to exclude specific files or directories with git-style patterns (the option can be repeated). ``--pathspec-file`` accepts gitignore-style files—pass it multiple times to layer exclusions such as ``.gitignore`` and ``.codequalityignore``. Patterns are resolved relative to the analyzed directory.
 
 ### Configuration
 

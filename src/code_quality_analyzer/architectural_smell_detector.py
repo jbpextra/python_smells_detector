@@ -8,6 +8,7 @@ import sys
 import importlib.util
 import logging
 from .exceptions import CodeAnalysisError
+from .path_filters import filter_child_directories, should_ignore
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -54,6 +55,8 @@ class ArchitecturalSmellDetector:
         self.file_paths = {}  # New attribute to store file paths
         self.external_dependencies = defaultdict(set)
         self.function_calls = defaultdict(set)  # Track inter-module function calls
+        self.pathspec = None
+        self.project_root = None
 
     def load_thresholds(self, config_path):
         """
@@ -69,10 +72,12 @@ class ArchitecturalSmellDetector:
             config = yaml.safe_load(file)
         return {k: v['value'] for k, v in config['architectural_smells'].items()}
 
-    def detect_smells(self, directory_path):
+    def detect_smells(self, directory_path, pathspec=None):
         """
         Detect architectural smells in the given directory.
         """
+        self.pathspec = pathspec
+        self.project_root = os.path.abspath(directory_path)
         detection_methods = [
             (self.detect_hub_like_dependency, "detect_hub_like_dependency"),
             (self.detect_scattered_functionality, "detect_scattered_functionality"),
@@ -116,11 +121,19 @@ class ArchitecturalSmellDetector:
         Args:
             directory_path (str): The path to the directory to be analyzed.
         """
-        for root, _, files in os.walk(directory_path):
+        base_dir = self.project_root or os.path.abspath(directory_path)
+
+        for root, dirs, files in os.walk(base_dir):
+            filter_child_directories(dirs, root, base_dir, self.pathspec)
             for file in files:
-                if file.endswith('.py'):
-                    file_path = os.path.join(root, file)
-                    self.analyze_file(file_path)
+                if not file.endswith('.py'):
+                    continue
+
+                file_path = os.path.join(root, file)
+                if should_ignore(self.pathspec, base_dir, file_path):
+                    continue
+
+                self.analyze_file(file_path)
         
         # After analyzing all files, resolve external dependencies
         self.resolve_external_dependencies()
@@ -196,6 +209,10 @@ class ArchitecturalSmellDetector:
         """
         Resolve external dependencies while preserving intra-project dependencies.
         """
+        if not self.file_paths:
+            logger.warning("No files analyzed; skipping dependency resolution.")
+            return
+
         # Get all project modules
         project_root = os.path.dirname(os.path.dirname(next(iter(self.file_paths.values()))))
         all_modules = set(self.module_dependencies.nodes())
