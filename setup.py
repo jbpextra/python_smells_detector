@@ -6,11 +6,13 @@ setup(
     packages=find_packages(where="src"),
     package_dir={"": "src"},
     install_requires=[
-        "astroid",
-        "networkx",
-        "pyyaml",
-        "pytest",
+        "astroid>=3.0",
+        "networkx>=3.1",
+        "pyyaml>=6.0",
     ],
+    python_requires=">=3.7",
+    include_package_data=True,
+    package_data={"code_quality_analyzer": ["code_quality_config.yaml"]},
     entry_points={
         "console_scripts": [
             "analyze_code_quality=code_quality_analyzer.main:analyze_project",
@@ -28,11 +30,22 @@ setup(
         "Operating System :: OS Independent",
     ],
     extras_require={
+        'test': [
+            'pytest>=7.0',
+        ],
+        'docs': [
+            'sphinx>=4.0',
+            'sphinx-rtd-theme>=1.0',
+            'sphinx-autodoc-typehints>=1.12',
+            'myst-parser>=0.15',
+        ],
         'dev': [
-            'pytest',
-            'sphinx',
-            'sphinx-rtd-theme',
-            'black',
+            'pytest>=7.0',
+            'black>=24.0',
+            'sphinx>=4.0',
+            'sphinx-rtd-theme>=1.0',
+            'sphinx-autodoc-typehints>=1.12',
+            'myst-parser>=0.15',
         ],
     },
 )

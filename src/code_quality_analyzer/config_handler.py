@@ -1,5 +1,7 @@
+import os
 import yaml
 import logging
+import importlib.resources as pkg_resources
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +26,7 @@ class ConfigHandler:
         Load threshold values from the YAML configuration file.
         """
         try:
-            with open(self.config_path, 'r') as file:
+            with open(self.config_path, 'r', encoding='utf-8') as file:
                 config = yaml.safe_load(file)
                 
             logger.info(f"Loading configuration from: {self.config_path}")
@@ -39,6 +41,13 @@ class ConfigHandler:
             return thresholds
             
         except FileNotFoundError:
+            logger.warning(
+                "Configuration file not found at '%s'. Attempting to load packaged default.",
+                self.config_path,
+            )
+            thresholds = self._load_packaged_config()
+            if thresholds is not None:
+                return thresholds
             logger.error(f"Configuration file not found: {self.config_path}")
             raise
         except yaml.YAMLError as e:
@@ -47,6 +56,30 @@ class ConfigHandler:
         except Exception as e:
             logger.error(f"Unexpected error loading configuration: {str(e)}")
             raise
+
+    def _load_packaged_config(self):
+        """Attempt to load the default configuration shipped with the package."""
+        default_name = os.path.basename(self.config_path)
+        if default_name != 'code_quality_config.yaml':
+            return None
+
+        try:
+            resource = pkg_resources.files('code_quality_analyzer').joinpath(default_name)
+            with resource.open('r', encoding='utf-8') as file:
+                config = yaml.safe_load(file)
+
+            thresholds = {
+                'code_smells': {k: v['value'] for k, v in config.get('code_smells', {}).items()},
+                'architectural_smells': {k: v['value'] for k, v in config.get('architectural_smells', {}).items()},
+                'structural_smells': {k: v['value'] for k, v in config.get('structural_smells', {}).items()}
+            }
+            self.config_path = str(resource)
+            return thresholds
+        except FileNotFoundError:
+            logger.error("Packaged default configuration '%s' is missing.", default_name)
+        except Exception as exc:
+            logger.error("Failed to load packaged configuration '%s': %s", default_name, exc)
+        return None
 
     def _validate_thresholds(self):
         """

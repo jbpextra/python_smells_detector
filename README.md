@@ -42,6 +42,7 @@ A comprehensive Python code quality analysis tool that detects code smells, arch
 Download the repository
 cd  "the_repository"
 pip install -e .
+pip install -r requirements.txt  # Installs only the runtime dependencies
 ```
 
 ## Usage
@@ -87,6 +88,8 @@ code_smells:
     explanation: "Classes with more than this many methods may have too many responsibilities"
   # ... other thresholds
 ```
+
+> **Note:** If `code_quality_config.yaml` is missing from your working directory, the CLI automatically loads the packaged default before analyzing code. Provide `--config /path/to/config.yaml` to use a custom configuration.
 
 ### Output Formats
 

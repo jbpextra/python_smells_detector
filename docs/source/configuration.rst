@@ -8,6 +8,10 @@ Configuration File
 
 The default configuration file is ``code_quality_config.yaml``. You can specify a custom configuration file using the ``--config`` option.
 
+.. note::
+
+   When ``code_quality_config.yaml`` is not present in your current working directory, the CLI automatically loads the copy bundled with ``code_quality_analyzer``. Provide the ``--config`` flag to point to your own file if you want to override the defaults.
+
 Example Configuration
 -------------------
 
@@ -35,4 +39,4 @@ Example Configuration
 Customizing Thresholds
 --------------------
 
-You can customize any threshold by creating your own configuration file based on the default template. 
+You can customize any threshold by creating your own configuration file based on the default template.
