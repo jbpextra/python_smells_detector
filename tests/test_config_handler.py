@@ -19,3 +19,18 @@ def test_missing_custom_config_raises(monkeypatch, tmp_path):
 
     with pytest.raises(FileNotFoundError):
         ConfigHandler('custom_thresholds.yaml')
+
+
+def test_packaged_default_loads_without_files_api(monkeypatch, tmp_path):
+    """Fallback should work even if importlib.resources lacks the files helper."""
+    monkeypatch.chdir(tmp_path)
+
+    import code_quality_analyzer.config_handler as config_handler
+
+    monkeypatch.delattr(config_handler.pkg_resources, 'files', raising=False)
+
+    handler = config_handler.ConfigHandler('code_quality_config.yaml')
+
+    thresholds = handler.get_thresholds('code_smells')
+    assert thresholds
+    assert handler.config_path.endswith('code_quality_config.yaml')

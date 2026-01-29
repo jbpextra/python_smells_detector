@@ -1,6 +1,7 @@
 import os
 import yaml
 import logging
+import warnings
 import importlib.resources as pkg_resources
 
 logger = logging.getLogger(__name__)
@@ -64,22 +65,35 @@ class ConfigHandler:
             return None
 
         try:
-            resource = pkg_resources.files('code_quality_analyzer').joinpath(default_name)
-            with resource.open('r', encoding='utf-8') as file:
-                config = yaml.safe_load(file)
+            config, resource_path = self._read_packaged_config(default_name)
 
             thresholds = {
                 'code_smells': {k: v['value'] for k, v in config.get('code_smells', {}).items()},
                 'architectural_smells': {k: v['value'] for k, v in config.get('architectural_smells', {}).items()},
                 'structural_smells': {k: v['value'] for k, v in config.get('structural_smells', {}).items()}
             }
-            self.config_path = str(resource)
+            self.config_path = resource_path
             return thresholds
         except FileNotFoundError:
             logger.error("Packaged default configuration '%s' is missing.", default_name)
         except Exception as exc:
             logger.error("Failed to load packaged configuration '%s': %s", default_name, exc)
         return None
+
+    def _read_packaged_config(self, resource_name):
+        """Load a packaged resource, falling back for older Python versions."""
+        files_accessor = getattr(pkg_resources, 'files', None)
+
+        if callable(files_accessor):
+            resource = files_accessor('code_quality_analyzer').joinpath(resource_name)
+            with resource.open('r', encoding='utf-8') as file:
+                return yaml.safe_load(file), str(resource)
+
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', DeprecationWarning)
+            with pkg_resources.path('code_quality_analyzer', resource_name) as resource:
+                with open(resource, 'r', encoding='utf-8') as file:
+                    return yaml.safe_load(file), str(resource)
 
     def _validate_thresholds(self):
         """
