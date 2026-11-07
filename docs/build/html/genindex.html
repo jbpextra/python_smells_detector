@@ -1,22 +1,20 @@
+
+
 <!DOCTYPE html>
 <html class="writer-html5" lang="en" data-content_root="./">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Index &mdash; Code Quality Analyzer 0.1 documentation</title>
-      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=fa44fd50" />
-      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=19f00094" />
+  <title>Index &mdash; Code Quality Analyzer 0.3.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=03e43079" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
 
   
-  <!--[if lt IE 9]>
-    <script src="_static/js/html5shiv.min.js"></script>
-  <![endif]-->
-  
-        <script src="_static/jquery.js?v=5d32c60e"></script>
-        <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-        <script src="_static/documentation_options.js?v=2709fde1"></script>
-        <script src="_static/doctools.js?v=9a2dae69"></script>
-        <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=e259d695"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="#" />
     <link rel="search" title="Search" href="search.html" /> 
@@ -47,6 +45,7 @@
 <li class="toctree-l1"><a class="reference internal" href="usage.html">Usage Guide</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tutorial.html">Tutorial</a></li>
 <li class="toctree-l1"><a class="reference internal" href="configuration.html">Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="test.html">Testing</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">API Reference:</span></p>
 <ul>
@@ -116,19 +115,49 @@
         <li><a href="structural_smell_detector.html#code_quality_analyzer.structural_smell_detector.StructuralSmellDetector.__init__">(code_quality_analyzer.structural_smell_detector.StructuralSmellDetector method)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="structural_smell_detector.html#code_quality_analyzer.structural_smell_detector.StructuralSmellDetector._adjust_noc_threshold">_adjust_noc_threshold() (code_quality_analyzer.structural_smell_detector.StructuralSmellDetector method)</a>
 </li>
-      <li><a href="structural_smell_detector.html#code_quality_analyzer.structural_smell_detector.StructuralSmellDetector._analyze_branches">_analyze_branches() (code_quality_analyzer.structural_smell_detector.StructuralSmellDetector method)</a>
+      <li><a href="structural_smell_detector.html#code_quality_analyzer.structural_smell_detector.StructuralSmellDetector._build_dependency_graph">_build_dependency_graph() (code_quality_analyzer.structural_smell_detector.StructuralSmellDetector method)</a>
 </li>
       <li><a href="structural_smell_detector.html#code_quality_analyzer.structural_smell_detector.StructuralSmellDetector._build_field_usage_map">_build_field_usage_map() (code_quality_analyzer.structural_smell_detector.StructuralSmellDetector method)</a>
 </li>
       <li><a href="structural_smell_detector.html#code_quality_analyzer.structural_smell_detector.StructuralSmellDetector._calculate_cbo_severity">_calculate_cbo_severity() (code_quality_analyzer.structural_smell_detector.StructuralSmellDetector method)</a>
 </li>
-      <li><a href="structural_smell_detector.html#code_quality_analyzer.structural_smell_detector.StructuralSmellDetector._get_base_object">_get_base_object() (code_quality_analyzer.structural_smell_detector.StructuralSmellDetector method)</a>
+      <li><a href="architectural_smell_detector.html#code_quality_analyzer.architectural_smell_detector.ArchitecturalSmellDetector._core_graph">_core_graph() (code_quality_analyzer.architectural_smell_detector.ArchitecturalSmellDetector method)</a>
 </li>
-      <li><a href="structural_smell_detector.html#code_quality_analyzer.structural_smell_detector.StructuralSmellDetector._is_excluded_dependency">_is_excluded_dependency() (code_quality_analyzer.structural_smell_detector.StructuralSmellDetector method)</a>
+      <li><a href="structural_smell_detector.html#code_quality_analyzer.structural_smell_detector.StructuralSmellDetector._count_branches">_count_branches() (code_quality_analyzer.structural_smell_detector.StructuralSmellDetector static method)</a>
+</li>
+      <li><a href="code_smell_detector.html#code_quality_analyzer.code_smell_detector.CodeSmellDetector._cross_file_temporary_fields">_cross_file_temporary_fields() (code_quality_analyzer.code_smell_detector.CodeSmellDetector method)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="structural_smell_detector.html#code_quality_analyzer.structural_smell_detector.StructuralSmellDetector._cyclomatic_complexity">_cyclomatic_complexity() (code_quality_analyzer.structural_smell_detector.StructuralSmellDetector static method)</a>
+</li>
+      <li><a href="code_smell_detector.html#code_quality_analyzer.code_smell_detector.CodeSmellDetector._decorator_names">_decorator_names() (code_quality_analyzer.code_smell_detector.CodeSmellDetector static method)</a>
+</li>
+      <li><a href="code_smell_detector.html#code_quality_analyzer.code_smell_detector.CodeSmellDetector._drop_file_findings">_drop_file_findings() (code_quality_analyzer.code_smell_detector.CodeSmellDetector method)</a>
+</li>
+      <li><a href="structural_smell_detector.html#code_quality_analyzer.structural_smell_detector.StructuralSmellDetector._functions">_functions() (code_quality_analyzer.structural_smell_detector.StructuralSmellDetector method)</a>
+</li>
+      <li><a href="structural_smell_detector.html#code_quality_analyzer.structural_smell_detector.StructuralSmellDetector._get_attr_base">_get_attr_base() (code_quality_analyzer.structural_smell_detector.StructuralSmellDetector method)</a>
+</li>
+      <li><a href="architectural_smell_detector.html#code_quality_analyzer.architectural_smell_detector.ArchitecturalSmellDetector._has_part">_has_part() (code_quality_analyzer.architectural_smell_detector.ArchitecturalSmellDetector method)</a>
+</li>
+      <li><a href="code_smell_detector.html#code_quality_analyzer.code_smell_detector.CodeSmellDetector._imported_names">_imported_names() (code_quality_analyzer.code_smell_detector.CodeSmellDetector static method)</a>
+</li>
+      <li><a href="structural_smell_detector.html#code_quality_analyzer.structural_smell_detector.StructuralSmellDetector._line_counts">_line_counts() (code_quality_analyzer.structural_smell_detector.StructuralSmellDetector method)</a>
+</li>
+      <li><a href="structural_smell_detector.html#code_quality_analyzer.structural_smell_detector.StructuralSmellDetector._max_nesting">_max_nesting() (code_quality_analyzer.structural_smell_detector.StructuralSmellDetector static method)</a>
+</li>
+      <li><a href="code_smell_detector.html#code_quality_analyzer.code_smell_detector.CodeSmellDetector._maximal_param_groups">_maximal_param_groups() (code_quality_analyzer.code_smell_detector.CodeSmellDetector method)</a>
+</li>
+      <li><a href="code_smell_detector.html#code_quality_analyzer.code_smell_detector.CodeSmellDetector._names_correspond">_names_correspond() (code_quality_analyzer.code_smell_detector.CodeSmellDetector static method)</a>
+</li>
+      <li><a href="code_smell_detector.html#code_quality_analyzer.code_smell_detector.CodeSmellDetector._parameters">_parameters() (code_quality_analyzer.code_smell_detector.CodeSmellDetector static method)</a>
+</li>
+      <li><a href="code_smell_detector.html#code_quality_analyzer.code_smell_detector.CodeSmellDetector._root_name">_root_name() (code_quality_analyzer.code_smell_detector.CodeSmellDetector static method)</a>
+</li>
+      <li><a href="code_smell_detector.html#code_quality_analyzer.code_smell_detector.CodeSmellDetector._share_base">_share_base() (code_quality_analyzer.code_smell_detector.CodeSmellDetector static method)</a>
 </li>
       <li><a href="config_handler.html#code_quality_analyzer.config_handler.ConfigHandler._validate_thresholds">_validate_thresholds() (code_quality_analyzer.config_handler.ConfigHandler method)</a>
 </li>
@@ -146,8 +175,6 @@
         <li><a href="structural_smell_detector.html#code_quality_analyzer.structural_smell_detector.StructuralSmellDetector.add_smell">(code_quality_analyzer.structural_smell_detector.StructuralSmellDetector method)</a>
 </li>
       </ul></li>
-      <li><a href="architectural_smell_detector.html#code_quality_analyzer.architectural_smell_detector.analyze_architecture">analyze_architecture() (in module code_quality_analyzer.architectural_smell_detector)</a>
-</li>
       <li><a href="structural_smell_detector.html#code_quality_analyzer.structural_smell_detector.StructuralSmellDetector.analyze_class">analyze_class() (code_quality_analyzer.structural_smell_detector.StructuralSmellDetector method)</a>
 </li>
       <li><a href="architectural_smell_detector.html#code_quality_analyzer.architectural_smell_detector.ArchitecturalSmellDetector.analyze_directory">analyze_directory() (code_quality_analyzer.architectural_smell_detector.ArchitecturalSmellDetector method)</a>
@@ -238,6 +265,8 @@
 </li>
       <li><a href="code_smell_detector.html#code_quality_analyzer.code_smell_detector.CodeSmellDetector.detect_comments">detect_comments() (code_quality_analyzer.code_smell_detector.CodeSmellDetector method)</a>
 </li>
+      <li><a href="code_smell_detector.html#code_quality_analyzer.code_smell_detector.CodeSmellDetector.detect_cross_file_smells">detect_cross_file_smells() (code_quality_analyzer.code_smell_detector.CodeSmellDetector method)</a>
+</li>
       <li><a href="architectural_smell_detector.html#code_quality_analyzer.architectural_smell_detector.ArchitecturalSmellDetector.detect_cyclic_dependencies">detect_cyclic_dependencies() (code_quality_analyzer.architectural_smell_detector.ArchitecturalSmellDetector method)</a>
 </li>
       <li><a href="structural_smell_detector.html#code_quality_analyzer.structural_smell_detector.StructuralSmellDetector.detect_cyclomatic_complexity">detect_cyclomatic_complexity() (code_quality_analyzer.structural_smell_detector.StructuralSmellDetector method)</a>
@@ -274,10 +303,10 @@
 </li>
       <li><a href="code_smell_detector.html#code_quality_analyzer.code_smell_detector.CodeSmellDetector.detect_lazy_class">detect_lazy_class() (code_quality_analyzer.code_smell_detector.CodeSmellDetector method)</a>
 </li>
-      <li><a href="structural_smell_detector.html#code_quality_analyzer.structural_smell_detector.StructuralSmellDetector.detect_lcom">detect_lcom() (code_quality_analyzer.structural_smell_detector.StructuralSmellDetector method)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="structural_smell_detector.html#code_quality_analyzer.structural_smell_detector.StructuralSmellDetector.detect_lcom">detect_lcom() (code_quality_analyzer.structural_smell_detector.StructuralSmellDetector method)</a>
+</li>
       <li><a href="structural_smell_detector.html#code_quality_analyzer.structural_smell_detector.StructuralSmellDetector.detect_loc">detect_loc() (code_quality_analyzer.structural_smell_detector.StructuralSmellDetector method)</a>
 </li>
       <li><a href="code_smell_detector.html#code_quality_analyzer.code_smell_detector.CodeSmellDetector.detect_long_methods">detect_long_methods() (code_quality_analyzer.code_smell_detector.CodeSmellDetector method)</a>
@@ -370,11 +399,9 @@
       </ul></li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="architectural_smell_detector.html#code_quality_analyzer.architectural_smell_detector.ArchitecturalSmellDetector.load_thresholds">load_thresholds() (code_quality_analyzer.architectural_smell_detector.ArchitecturalSmellDetector method)</a>
+      <li><a href="config_handler.html#code_quality_analyzer.config_handler.ConfigHandler.load_thresholds">load_thresholds() (code_quality_analyzer.config_handler.ConfigHandler method)</a>
 
       <ul>
-        <li><a href="config_handler.html#code_quality_analyzer.config_handler.ConfigHandler.load_thresholds">(code_quality_analyzer.config_handler.ConfigHandler method)</a>
-</li>
         <li><a href="structural_smell_detector.html#code_quality_analyzer.structural_smell_detector.StructuralSmellDetector.load_thresholds">(code_quality_analyzer.structural_smell_detector.StructuralSmellDetector method)</a>
 </li>
       </ul></li>
@@ -479,7 +506,7 @@
   <hr/>
 
   <div role="contentinfo">
-    <p>&#169; Copyright 2024, Your Name.</p>
+    <p>&#169; Copyright 2026, Karthik Shivashankar.</p>
   </div>
 
   Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
